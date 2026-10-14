@@ -1,0 +1,13 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import './cost.js';
+const {calculate,number}=globalThis.airfareCost;
+const base={miles:'60000',price:'1.4',priceUnit:'cpp',tax:'50',taxCurrency:'USD',cash:'1200',cashCurrency:'USD',fx:'7'};
+const near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-9,`${actual} != ${expected}`);
+test('known example: all six requested metrics',()=>{const r=calculate(base);assert.equal(r.total,890);near(r.ratio,1200/890);assert.equal(r.savings,310);near(r.savingsRate,310/1200);near(r.redemptionCpp,1150/600);near(r.valueRatio,(1150/600)/1.4);assert.equal(r.cnyPerThousand,98);});
+test('mixed currencies yield the same economic result',()=>{const r=calculate({...base,tax:'350',taxCurrency:'CNY',cash:'8400',cashCurrency:'CNY'});near(r.total,890);near(r.savings,310);const mixed=calculate({...base,tax:'350',taxCurrency:'CNY'});near(mixed.total,890);});
+test('RMB per thousand stays fixed as FX changes',()=>{const v={...base,price:'98',priceUnit:'cny'};near(calculate(v).total,890);const r=calculate({...v,fx:'8'});near(r.pointCost*8,5880);near(r.cpp,1.225);});
+test('USD CPP stays fixed as FX changes',()=>{near(calculate({...base,fx:'8'}).pointCost,840);near(calculate({...base,fx:'8'}).cnyPerThousand,112);});
+test('zero denominators are not infinity and losses stay negative',()=>{const r=calculate({...base,price:'0',tax:'0',cash:'0'});assert.equal(r.ratio,null);assert.equal(r.savingsRate,null);assert.equal(r.valueRatio,null);const loss=calculate({...base,cash:'20'});assert.ok(loss.savings<0);assert.ok(loss.redemptionCpp<0);});
+test('invalid and incomplete input never produces a misleading result',()=>{for(const patch of [{miles:'0'},{miles:'1.5'},{price:'-1'},{tax:''},{cash:'Infinity'},{fx:'0'},{fx:'garbage'},{cashCurrency:'EUR'}])assert.ok(calculate({...base,...patch}).error);assert.equal(number('60,000'),60000);assert.equal(number('60，000'),60000);});
+test('overflow is rejected',()=>{assert.ok(calculate({...base,miles:'9'.repeat(307),price:'9'.repeat(307)}).error);});

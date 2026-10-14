@@ -1,0 +1,59 @@
+更新：用户已选择 SerpApi，接入代码已完成。启动与当前限制以 SerpApi配置说明.txt 为准。以下为前期选型记录。
+
+机票兑换成本计算器：自动票价 API 选型
+核查日期：2026-10-12（America/New_York）
+
+结论
+建议先验证 SerpApi Google Flights 数据接口。适合个人计算器的查询场景；需注册取得 API key。本轮仅做官方文档选型，未注册、购买套餐或实际调用报价 API，不保证指定航线一定有报价。
+
+候选比较
+1. SerpApi：第三方提取 Google Flights 结果，并非 Google 官方出票 API。支持日期、舱位、乘客类型及人数、单程/往返/多城市。selected_flights_json 可以逐段指定航班号、机场和起飞日期。免费250次/月；Starter为25美元/月、1000次。一次完整查询可能包含后续请求，不能把额度等同于行程数。
+官方文档：https://serpapi.com/google-flights-api
+价格：https://serpapi.com/pricing
+
+2. Duffel：更偏向机票销售和预订，可通过 offer request 搜索符合行程和乘客条件的报价。公开费率对超过1500:1搜索/订单比的请求收取0.005美元/次。只查询、不出票的用途应先确认商业适用性和正式环境权限。
+文档：https://duffel.com/docs/api/v2/offer-requests
+价格：https://duffel.com/pricing
+
+3. Skyscanner Travel API：官方明确仅供商业使用，要求成熟业务及至少10万月活用户，不适合当前个人本地工具申请。
+准入：https://www.partners.skyscanner.net/contact/travel-api
+
+4. Amadeus：官方门户现已公告Self-Service在7月17日退役，目前为Enterprise入口；不建议按旧的自助免费教程接入。官网公告未在正文写年份，其官方SDK仓库在2026-07-17归档。
+门户：https://developers.amadeus.com/
+官方SDK：https://github.com/amadeus4dev/amadeus-node
+
+本项目建议的接入流程（待实施）
+浏览器表单 → 本地 Python 服务 → SerpApi → 校验匹配航班 → 展示候选报价 → 使用报价填入现金价。
+API密钥仅保存在本地服务环境变量中，不打包进HTML或放入浏览器localStorage。现有离线单文件继续负责手动计算；联网报价使用本地服务版本，手机通过同一局域网访问电脑。
+
+需要补齐的输入
+- 出发和到达机场必须落实为IATA机场代码，不能只依赖城市名。
+- 每个航段的航班号、当地起飞日期；往返需分别录入去程和回程，多城市需结构化航段表。
+- 成人、儿童、婴儿分类；当前“总人数”字段不足以准确请求儿童或婴儿报价。
+- 舱位、销售市场与报价币种；同舱位不同票价品牌的行李和退改条件可能不同。
+
+SerpApi请求示意（参数示例，不代表已验证的班期或实际报价）
+GET https://serpapi.com/search
+engine=google_flights
+type=2
+travel_class=3
+adults=1
+currency=USD
+gl=us
+selected_flights_json={"outbound":[{"flight_number":"MU588","departure_id":"JFK","arrival_id":"PVG","date":"2026-11-10"}]}
+api_key=由本地服务注入
+
+多城市注意
+selected_flights_json不能与multi_city_json/type=3并用。多城市需先搜索行程，再用departure_token逐程选定，并核对最终完整航程；booking_token用于进一步获取售票选项。不要把多个独立单程价相加当作往返联程票价。
+
+匹配和价格口径
+- 同航班模式逐段核对机场、日期、航班号及舱位；共享航班同时展示营销与承运信息（若来源提供）。缺少字段时标为待确认，不宣称完全匹配。
+- 核验所有乘客、全部航段的最终含税总价；接口价格字段究竟是每人还是整组必须在实测中确认，不应盲目乘人数。
+- 不把最低路线价、价格趋势值或不同航班价自动当作“同航班现金价”。替代机票模式可让用户选择其他行程。
+- 多个售票方可列出匹配报价、币种、行李/退改摘要、来源及报价时间；不保证与最终付款页一致。
+- 查询失败或没有匹配航班时保留手动价格，不写入0，也不覆盖用户新修改的输入。
+- 页面注明最新请求时间与来源数据时间；缓存结果不得标为实时。SerpApi默认相同参数缓存1小时，no_cache=true可要求重新获取；深度搜索耗时更长。
+
+建议实施顺序
+先在免费额度内用常用航线验证：单程、往返、商务舱、两名成人、儿童同行、共享航班、无匹配、混合舱位、过期报价。重点确认中国航司及常用境内/国际航线的覆盖和总价口径。
+通过后再实现本地服务代理、查询预算限制、候选报价选择和超时降级。由完整条件变化触发去重和延迟查询；修改miles、买分价或税费不应重新调用机票API。

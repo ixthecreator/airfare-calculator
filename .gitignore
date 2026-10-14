@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+*.key
+*.pem
+*.zip
+*.png
+.impeccable/review/
+机票兑换成本计算器.html
